@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import datetime
+import json
+
 import pytz
 # [START gae_python38_render_template]
 # [START gae_python3_render_template]
@@ -45,9 +47,9 @@ import os
 import logging
 from heyoo import WhatsApp
 from dotenv import load_dotenv
-from flask import Flask, request, make_response,session
+from flask import Flask, request, make_response, jsonify, render_template
 from flask_session import Session
-from datetime import datetime,timezone
+from datetime import datetime
 import tempfile
 import pymysql
 db_user = os.environ.get('CLOUD_SQL_USERNAME')
@@ -55,6 +57,7 @@ db_password = os.environ.get('CLOUD_SQL_PASSWORD')
 db_name = os.environ.get('CLOUD_SQL_DATABASE_NAME')
 db_connection_name = os.environ.get('CLOUD_SQL_CONNECTION_NAME')
 ist_tz = pytz.timezone('Asia/Kolkata')
+NoneType = type(None)
 # Initialize Flask App
 app = Flask(__name__)
 app.config['SESSION_TYPE'] = 'memcached'
@@ -108,8 +111,8 @@ def hook():
         if result is None:
             with cnx.cursor() as cursor:
                 logging.info("In here part 1")
-                sql = "INSERT INTO `Customers` (`name`, `phone_no`,`InsertTS`) VALUES (%s, %s)"
-                cursor.execute(sql, (name, mobile, datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
+                sql = "INSERT INTO `Customers` (`name`, `phone_no`,`InsertTS`) VALUES (%s, %s, %s)"
+                cursor.execute(sql, (name, mobile, datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),))
                 cnx.commit()
         message_type = messenger.get_message_type(data)
         logging.info("In here part 4")
@@ -119,15 +122,22 @@ def hook():
             name = messenger.get_name(data)
             logging.info("Message: %s", message)
             if message is not None:
-                if 'Hi' in message or 'hi' in message or 'HI' in message:
+                with cnx.cursor() as cursor:
+                    logging.info("In here part 3")
+                    sql = "select `Chat_Type` from `Customer_Log` where `Phone_No` = %s and `Se_id` = (select max(`Se_id`) from `Customer_Log` where `Phone_No` = %s)"
+                    cursor.execute(sql, (mobile, mobile))
+                    result = cursor.fetchone()
+                if result is None:
+                    result = {0: 'end'}
+                if result[0] == 'end':
                     messenger.send_message(f"Hi {name}, Welcome to Prince Pipe Customer Outreach Program", mobile)
                     messenger.send_message(f"Please enter your item", mobile)
                     with cnx.cursor() as cursor:
                         logging.info(time)
-                        sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`) VALUES (%s, %s, %s)"
-                        cursor.execute(sql,(mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message))
+                        sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
+                        cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'greet'))
                         cnx.commit()
-                elif 'T' in message:
+                elif result[0] == 'greet':
                     logging.info(time)
                     messenger.send_message(f"Your item is {message}", mobile)
                     messenger.send_message(f"Please enter your address", mobile)
@@ -136,7 +146,7 @@ def hook():
                         sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`, `Chat_Type`) VALUES (%s, %s, %s, %s)"
                         cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'item'))
                         cnx.commit()
-                elif 'A' in message:
+                elif result[0] == 'item':
                     logging.info(time)
                     messenger.send_message(f"Your address is {message}", mobile)
                     messenger.send_message(f"Please type end", mobile)
@@ -145,7 +155,7 @@ def hook():
                         sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
                         cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'address'))
                         cnx.commit()
-                elif 'end' in message:
+                elif result[0] == 'address':
                     with cnx.cursor() as cursor:
                         logging.info("In here part 3")
                         sql = "SELECT * FROM `Customer_Log` WHERE `Phone_No`= %s and `Chat_Type` in (%s,%s)"
@@ -160,10 +170,17 @@ def hook():
                                 add_order = row[2]
                     messenger.send_message(f"You have ordered {item_order}, which will be delivered to {add_order}", mobile)
                     with cnx.cursor() as cursor:
+                        logging.info("In here part 7")
+                        sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
+                        cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
+                        cnx.commit()
+                    with cnx.cursor() as cursor:
                         logging.info("In here part 8")
                         sql = "INSERT INTO `Order_Table` (`OrderNo`,`CancelFlag`,`ItemDesc`,`CustomerName`,`CustomerPhoneNo`,`ShippingAddress`,`InsertTimeStamp`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
                         cursor.execute(sql, ('OR001', 'N', item_order, name, mobile, add_order, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
                         cnx.commit()
+                else:
+                    messenger.send_message(f"Sorry but I don't understand what you are saying try saying Hi to start the session again", mobile)
 
             else:
                 messenger.send_message(f"gar marao", mobile)
@@ -171,6 +188,15 @@ def hook():
             print("No new message")
     return "ok"
 
+
+@app.route('/data', methods=['GET'])
+def get_data():
+    data = {'key': 'value'}
+    json_data = json.dumps(data)
+    return json_data
+@app.route('/try', methods=['GET'])
+def try_data():
+    return render_template('index.html')
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
