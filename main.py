@@ -160,37 +160,50 @@ def hook():
                         with cnx.cursor() as cursor:
                             sql = "update `Order_Table` set `CancelFlag` =  %s where `OrderNo` = %s"
                             cursor.execute(sql, ('Y', message))
+                            sql2 = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`, `Chat_Type`) VALUES (%s, %s, %s, %s)"
+                            cursor.execute(sql2, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
                             cnx.commit()
                         messenger.send_message(f"Order number {message} Cancelled. Please say Hi to start a new session.", mobile)
-                elif result[0] == 'address':
-                    with cnx.cursor() as cursor:
-                        logging.info("In here part 3")
-                        sql = "SELECT * FROM `Customer_Log` WHERE `Phone_No`= %s and `Chat_Type` in (%s,%s)"
-                        cursor.execute(sql, (mobile, 'item', 'address'))
-                        result = cursor.fetchall()
-                        logging.info('The result Set is: ')
-                        logging.info(result)
-                        for row in result:
-                            if row[4] == 'item':
-                                item_order = row[2]
-                            elif row[4] == 'address':
-                                add_order = row[2]
-                    messenger.send_message(f"You have ordered {item_order}, which will be delivered to {add_order}", mobile)
-                    with cnx.cursor() as cursor:
-                        logging.info("In here part 7")
-                        sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
-                        cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
-                        cnx.commit()
+                elif result[0] == 'item':
                     with cnx.cursor() as cursor:
                         logging.info("In here part 8")
-                        sql = "INSERT INTO `Order_Table` (`OrderNo`,`CancelFlag`,`ItemDesc`,`CustomerName`,`CustomerPhoneNo`,`ShippingAddress`,`InsertTimeStamp`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-                        cursor.execute(sql, ('OR001', 'N', item_order, name, mobile, add_order, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
+                        sql = "INSERT INTO `Order_Table` (`OrderNo`,`CancelFlag`,`ItemValue`,`ItemDesc`,`CustomerName`,`CustomerPhoneNo`,`ShippingAddress`,`InsertTimeStamp`) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                        cursor.execute(sql, ('OR001', 'N', 10, result[1], name, mobile, message, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
+                        sql2 = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`, `Chat_Type`) VALUES (%s, %s, %s, %s)"
+                        cursor.execute(sql2, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
                         cnx.commit()
+                        messenger.send_message(f"Thank you for ordering {name}. Your {result[1]} will be delivered to {message}.\n Say Hi to start another session", mobile)
+
+
+                # elif result[0] == 'address':
+                #     with cnx.cursor() as cursor:
+                #         logging.info("In here part 3")
+                #         sql = "SELECT * FROM `Customer_Log` WHERE `Phone_No`= %s and `Chat_Type` in (%s,%s)"
+                #         cursor.execute(sql, (mobile, 'item', 'address'))
+                #         result = cursor.fetchall()
+                #         logging.info('The result Set is: ')
+                #         logging.info(result)
+                #         for row in result:
+                #             if row[4] == 'item':
+                #                 item_order = row[2]
+                #             elif row[4] == 'address':
+                #                 add_order = row[2]
+                #     messenger.send_message(f"You have ordered {item_order}, which will be delivered to {add_order}", mobile)
+                #     with cnx.cursor() as cursor:
+                #         logging.info("In here part 7")
+                #         sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
+                #         cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
+                #         cnx.commit()
+                #     with cnx.cursor() as cursor:
+                #         logging.info("In here part 8")
+                #         sql = "INSERT INTO `Order_Table` (`OrderNo`,`CancelFlag`,`ItemDesc`,`CustomerName`,`CustomerPhoneNo`,`ShippingAddress`,`InsertTimeStamp`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+                #         cursor.execute(sql, ('OR001', 'N', item_order, name, mobile, add_order, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
+                #         cnx.commit()
                 else:
                     messenger.send_message(f"Sorry but I don't understand what you are saying try saying Hi to start the session again", mobile)
 
             else:
-                messenger.send_message(f"gar marao", mobile)
+                messenger.send_message(f"Oops!! Only text message supported", mobile)
         else:
             print("No new message")
     return "ok"
