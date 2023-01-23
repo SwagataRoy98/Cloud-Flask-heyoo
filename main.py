@@ -47,11 +47,13 @@ import os
 import logging
 from heyoo import WhatsApp
 from dotenv import load_dotenv
-from flask import Flask, request, make_response,  render_template
+from flask import Flask, request, make_response, render_template, jsonify
 from flask_session import Session
 from datetime import datetime
 import tempfile
 import pymysql
+from urllib3 import response
+
 db_user = os.environ.get('CLOUD_SQL_USERNAME')
 db_password = os.environ.get('CLOUD_SQL_PASSWORD')
 db_name = os.environ.get('CLOUD_SQL_DATABASE_NAME')
@@ -158,8 +160,8 @@ def hook():
                             cnx.commit()
                     elif result[1] == '2':
                         with cnx.cursor() as cursor:
-                            sql = "update `Order_Table` set `CancelFlag` =  %s where `OrderNo` = %s"
-                            cursor.execute(sql, ('Y', message))
+                            sql = "update `Order_Table` set `CancelFlag` =  %s, `CancelTS` = %s where `OrderNo` = %s"
+                            cursor.execute(sql, ('Y', (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message))
                             sql2 = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`, `Chat_Type`) VALUES (%s, %s, %s, %s)"
                             cursor.execute(sql2, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
                             cnx.commit()
@@ -173,32 +175,6 @@ def hook():
                         cursor.execute(sql2, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
                         cnx.commit()
                         messenger.send_message(f"Thank you for ordering {name}. Your {result[1]} will be delivered to {message}.\n Say Hi to start another session", mobile)
-
-
-                # elif result[0] == 'address':
-                #     with cnx.cursor() as cursor:
-                #         logging.info("In here part 3")
-                #         sql = "SELECT * FROM `Customer_Log` WHERE `Phone_No`= %s and `Chat_Type` in (%s,%s)"
-                #         cursor.execute(sql, (mobile, 'item', 'address'))
-                #         result = cursor.fetchall()
-                #         logging.info('The result Set is: ')
-                #         logging.info(result)
-                #         for row in result:
-                #             if row[4] == 'item':
-                #                 item_order = row[2]
-                #             elif row[4] == 'address':
-                #                 add_order = row[2]
-                #     messenger.send_message(f"You have ordered {item_order}, which will be delivered to {add_order}", mobile)
-                #     with cnx.cursor() as cursor:
-                #         logging.info("In here part 7")
-                #         sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`,`Chat_Type`) VALUES (%s, %s, %s, %s)"
-                #         cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
-                #         cnx.commit()
-                #     with cnx.cursor() as cursor:
-                #         logging.info("In here part 8")
-                #         sql = "INSERT INTO `Order_Table` (`OrderNo`,`CancelFlag`,`ItemDesc`,`CustomerName`,`CustomerPhoneNo`,`ShippingAddress`,`InsertTimeStamp`) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-                #         cursor.execute(sql, ('OR001', 'N', item_order, name, mobile, add_order, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),)))
-                #         cnx.commit()
                 else:
                     messenger.send_message(f"Sorry but I don't understand what you are saying try saying Hi to start the session again", mobile)
 
@@ -210,13 +186,67 @@ def hook():
 
 
 @app.route('/data', methods=['GET'])
-def get_data():
-    data = {'key': 'value'}
-    json_data = json.dumps(data)
-    return json_data
-@app.route('/try', methods=['GET'])
-def try_data():
-    return render_template('index.html')
+def fetch_data():
+    response1 = jsonify({'some': 'data'})
+    response1.headers.add('Access-Control-Allow-Origin', '*')
+    return response1
+
+
+@app.route('/tanmoy', methods=['GET'])
+def tanmoy_data():
+    unix_socket = '/cloudsql/{}'.format(db_connection_name)
+    cnx = pymysql.connect(user=db_user, password=db_password, unix_socket=unix_socket, db=db_name)
+    with cnx.cursor() as cursor:
+        logging.info("In here part 3")
+        sql = "SELECT * FROM `Customers`"
+        cursor.execute(sql)
+        result_one = cursor.fetchall()
+        dicti = {}
+        for item in result_one:
+            dicti[item[0]] = item[1:4]
+        resp = jsonify(dicti)
+        resp.headers.add('Access-Control-Allow-Origin', '*')
+        logging.info(resp)
+        return resp
+
+
+@app.route('/swagata', methods=['GET'])
+def swagata_data():
+    unix_socket = '/cloudsql/{}'.format(db_connection_name)
+    cnx = pymysql.connect(user=db_user, password=db_password, unix_socket=unix_socket, db=db_name)
+    with cnx.cursor() as cursor:
+        logging.info("In here part 3")
+        sql = "SELECT `OrderNo`,`ItemDesc`,`ItemValue`,`InsertTimeStamp`, `CancelFlag`,`ShippingAddress` FROM `Order_Table`"
+        cursor.execute(sql)
+        result_one = cursor.fetchall()
+        dicti = {}
+        for item in result_one:
+            dicti[item[0]] = item[1:6]
+        resp = jsonify(dicti)
+        resp.headers.add('Access-Control-Allow-Origin', '*')
+        logging.info(resp)
+        return resp
+
+
+@app.route('/polley', methods=['GET'])
+def polley_data():
+    unix_socket = '/cloudsql/{}'.format(db_connection_name)
+    cnx = pymysql.connect(user=db_user, password=db_password, unix_socket=unix_socket, db=db_name)
+    with cnx.cursor() as cursor:
+        logging.info("In here part 3")
+        sql = "select date(`ChatTS`) as date,hour(`ChatTS`) as hour,Count(`Chat_Type`) as count from `Customer_Log` where `Chat_Type` =%s group by date(`ChatTS`),hour(`ChatTS`)"
+        cursor.execute(sql, 'greet')
+        result_one = cursor.fetchall()
+        dicti = {}
+        idx = 0
+        for item in result_one:
+            dicti[idx] = item[1:6]
+            idx = idx+1
+        resp = jsonify(dicti)
+        resp.headers.add('Access-Control-Allow-Origin', '*')
+        logging.info(resp)
+        return resp
+
 
 if __name__ == "__main__":
     app.run(port=5000, debug=True)
