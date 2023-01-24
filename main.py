@@ -177,6 +177,10 @@ def hook():
                         messenger.send_message(f"Thank you for ordering {name}. Your {result[1]} will be delivered to {message}.\n Say Hi to start another session", mobile)
                 else:
                     messenger.send_message(f"Sorry but I don't understand what you are saying try saying Hi to start the session again", mobile)
+                    with cnx.cursor() as cursor:
+                        sql = "INSERT INTO `Customer_Log` (`Phone_No`,`ChatTS`,`Chat_Details`, `Chat_Type`) VALUES (%s, %s, %s, %s)"
+                        cursor.execute(sql, (mobile, (datetime.now(ist_tz).strftime('%Y-%m-%d %H:%M:%S'),), message, 'end'))
+                        cnx.commit()
 
             else:
                 messenger.send_message(f"Oops!! Only text message supported", mobile)
